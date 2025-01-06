@@ -80,39 +80,28 @@ const FilePickerView = ({
   };
 
   const onPressMainView = async () => {
-    if (file) {
-      if (canPreview) {
-        openFilePreview(file.path);
-      } else {
-        if (pickerType === 'image') {
-          openImagePickerDialog();
-        } else {
-          openFilePicker();
-        }
-      }
-    } else {
+    if (!file) {
       if (pickerType === 'image') {
-        openImagePickerDialog();
+        return openImagePickerDialog();
       } else {
-        openFilePicker();
+        return openFilePicker();
       }
+    }
+
+    if (canPreview) {
+      return openFilePreview(file.path);
+    }
+
+    if (pickerType === 'image') {
+      return openImagePickerDialog();
+    } else {
+      return openFilePicker();
     }
   };
 
   const openFilePreview = async (path: string | null) => {
     if (!path) {
       return;
-    }
-
-    if (Platform.OS === 'android') {
-      const permissionGranted = await checkPermission(
-        PERMISSIONS.ANDROID.READ_EXTERNAL_STORAGE,
-      );
-      if (!permissionGranted) {
-        onPermissionDenied &&
-          onPermissionDenied(PERMISSIONS.ANDROID.READ_EXTERNAL_STORAGE);
-        return;
-      }
     }
 
     console.log('Open file:', path);
@@ -126,25 +115,16 @@ const FilePickerView = ({
   };
 
   const openFilePicker = async () => {
-    if (Platform.OS === 'android') {
-      const permissionGranted = await checkPermission(
-        PERMISSIONS.ANDROID.READ_EXTERNAL_STORAGE,
-      );
-      if (!permissionGranted) {
-        onPermissionDenied &&
-          onPermissionDenied(PERMISSIONS.ANDROID.READ_EXTERNAL_STORAGE);
-        return;
-      }
-    }
-
-    const f = await pickSingle();
+    const f = await pickSingle({
+      copyTo: 'cachesDirectory',
+    });
 
     if (sizeLimitInBytes && f.size && f.size > sizeLimitInBytes) {
       onExceedsSizeLimit && onExceedsSizeLimit();
       return;
     }
 
-    const nameAndExt = getFileNameAndExtension(f.uri);
+    const nameAndExt = getFileNameAndExtension(f.fileCopyUri ?? '');
     if (
       fileFormat &&
       fileFormat.length > 0 &&
@@ -157,7 +137,7 @@ const FilePickerView = ({
 
     const fileType: TFilePickerView = {
       name: nameAndExt.name,
-      path: f.uri,
+      path: f.fileCopyUri,
       extension: nameAndExt.extension,
       size: f.size,
     };
@@ -192,14 +172,14 @@ const FilePickerView = ({
       const permissionGranted = await checkPermission(
         Platform.OS === 'ios'
           ? PERMISSIONS.IOS.PHOTO_LIBRARY
-          : PERMISSIONS.ANDROID.READ_EXTERNAL_STORAGE,
+          : PERMISSIONS.ANDROID.READ_MEDIA_IMAGES,
       );
       if (!permissionGranted) {
         onPermissionDenied &&
           onPermissionDenied(
             Platform.OS === 'ios'
               ? PERMISSIONS.IOS.PHOTO_LIBRARY
-              : PERMISSIONS.ANDROID.READ_EXTERNAL_STORAGE,
+              : PERMISSIONS.ANDROID.READ_MEDIA_IMAGES,
           );
         return;
       }
