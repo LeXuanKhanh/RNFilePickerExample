@@ -12,7 +12,7 @@ import {
 } from 'react-native-permissions';
 import {styles} from './styles';
 
-type TFilePickerView = {
+export type TFilePickerFile = {
   path: string | null;
   name: string | null;
   extension: string | null;
@@ -34,20 +34,20 @@ const FilePickerView = ({
   onWrongFileFormat,
   onPermissionDenied,
 }: {
-  initialFile?: TFilePickerView;
+  initialFile?: TFilePickerFile;
   pickerType?: 'file' | 'image';
   style?: ViewStyle;
   sizeLimit?: number; // in MB
   emptyFileTitle?: string;
   canPreview?: boolean;
   fileFormat?: [string];
-  onSelectedFile?: (file: TFilePickerView) => void;
+  onSelectedFile?: (file: TFilePickerFile) => void;
   onRemovedFile?: () => void;
   onExceedsSizeLimit?: () => void;
   onWrongFileFormat?: () => void;
   onPermissionDenied?: (permission?: Permission) => void;
 }) => {
-  const [file, setFile] = useState<TFilePickerView | undefined>(undefined);
+  const [file, setFile] = useState<TFilePickerFile | undefined>(undefined);
 
   const sizeLimitInBytes = useMemo(
     () => (sizeLimit ? sizeLimit * 1024 * 1024 : undefined),
@@ -69,14 +69,6 @@ const FilePickerView = ({
     } catch (error) {
       return false;
     }
-  };
-
-  const getFileFromInitialFile = async () => {
-    if (!initialFile) {
-      return;
-    }
-
-    setFile(initialFile);
   };
 
   const onPressMainView = async () => {
@@ -135,7 +127,7 @@ const FilePickerView = ({
     }
     console.log('File:', f);
 
-    const fileType: TFilePickerView = {
+    const fileType: TFilePickerFile = {
       name: nameAndExt.name,
       path: f.fileCopyUri,
       extension: nameAndExt.extension,
@@ -167,30 +159,68 @@ const FilePickerView = ({
     );
   };
 
-  const openImagePicker = async (type: 'library' | 'camera' = 'library') => {
-    try {
+  const checkPermissionWhenOpenImagePicker = async () => {
+    if (Platform.OS === 'ios') {
       const permissionGranted = await checkPermission(
-        Platform.OS === 'ios'
-          ? PERMISSIONS.IOS.PHOTO_LIBRARY
-          : PERMISSIONS.ANDROID.READ_MEDIA_IMAGES,
+        PERMISSIONS.IOS.PHOTO_LIBRARY,
       );
       if (!permissionGranted) {
-        onPermissionDenied &&
-          onPermissionDenied(
-            Platform.OS === 'ios'
-              ? PERMISSIONS.IOS.PHOTO_LIBRARY
-              : PERMISSIONS.ANDROID.READ_MEDIA_IMAGES,
-          );
-        return;
+        onPermissionDenied?.(PERMISSIONS.IOS.PHOTO_LIBRARY);
+        return false;
+      }
+    }
+
+    if (Platform.OS === 'android') {
+      let permissionGranted = false;
+      if (Platform.Version < 33) {
+        permissionGranted = await checkPermission(
+          PERMISSIONS.ANDROID.READ_EXTERNAL_STORAGE,
+        );
+      } else {
+        permissionGranted = await checkPermission(
+          PERMISSIONS.ANDROID.READ_MEDIA_IMAGES,
+        );
       }
 
+      if (!permissionGranted) {
+        onPermissionDenied?.(
+          Platform.Version < 33
+            ? PERMISSIONS.ANDROID.READ_EXTERNAL_STORAGE
+            : PERMISSIONS.ANDROID.READ_MEDIA_IMAGES,
+        );
+        return false;
+      }
+    }
+
+    return true;
+  };
+
+  const openImagePicker = async (type: 'library' | 'camera' = 'library') => {
+    try {
       let img: Image;
       if (type === 'library') {
+        const permissionGranted = await checkPermissionWhenOpenImagePicker();
+        if (!permissionGranted) {
+          return;
+        }
         img = await ImageCropPicker.openPicker({
           cropping: false,
           mediaType: 'photo',
         });
       } else {
+        const permissionGranted = await checkPermission(
+          Platform.OS === 'ios'
+            ? PERMISSIONS.IOS.CAMERA
+            : PERMISSIONS.ANDROID.CAMERA,
+        );
+        if (!permissionGranted) {
+          onPermissionDenied?.(
+            Platform.OS === 'ios'
+              ? PERMISSIONS.IOS.CAMERA
+              : PERMISSIONS.ANDROID.CAMERA,
+          );
+          return;
+        }
         img = await ImageCropPicker.openCamera({
           cropping: false,
           mediaType: 'photo',
@@ -198,14 +228,14 @@ const FilePickerView = ({
       }
 
       if (sizeLimitInBytes && img.size && img.size > sizeLimitInBytes) {
-        onExceedsSizeLimit && onExceedsSizeLimit();
+        onExceedsSizeLimit?.();
         return;
       }
 
       const nameAndExt = getFileNameAndExtension(img.path);
       console.log('Image file:', img);
 
-      const fileType: TFilePickerView = {
+      const fileType: TFilePickerFile = {
         path: img.path,
         name: nameAndExt.name,
         extension: nameAndExt.extension,
@@ -213,7 +243,7 @@ const FilePickerView = ({
       };
 
       setFile(fileType);
-      onSelectedFile && onSelectedFile(fileType);
+      onSelectedFile?.(fileType);
     } catch (error) {
       console.log('Error:', error);
     }
@@ -221,13 +251,16 @@ const FilePickerView = ({
 
   const removeFile = () => {
     setFile(undefined);
-    onRemovedFile && onRemovedFile();
+    onRemovedFile?.();
   };
 
   useEffect(() => {
-    getFileFromInitialFile();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    if (!initialFile) {
+      return;
+    }
+
+    setFile(initialFile);
+  }, [initialFile]);
 
   return (
     <View style={[styles.container, style]}>

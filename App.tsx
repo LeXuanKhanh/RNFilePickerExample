@@ -39,6 +39,7 @@ function App(): React.JSX.Element {
             backgroundColor: isDarkMode ? Colors.black : Colors.white,
           }}>
           <FilePickerView
+            pickerType="image"
             style={styles.filePickerView}
             fileFormat={['pdf']}
             onExceedsSizeLimit={() => {
@@ -49,6 +50,9 @@ function App(): React.JSX.Element {
             }}
             onWrongFileFormat={() => {
               console.log('Wrong file format');
+            }}
+            onPermissionDenied={permission => {
+              console.log('Permission denied', permission);
             }}
           />
         </View>
